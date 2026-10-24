@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Check formatting (gofmt)
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "Files need gofmt:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -race ./...
+
+  frontend:
+    name: Frontend (vanilla JS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: JS syntax check
+        run: |
+          shopt -s globstar nullglob
+          files=(frontend/js/**/*.js)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No JS files found"
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+
+      - name: Static pages exist
+        run: test -f frontend/index.html && test -f frontend/privacy.html
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate compose config
+        run: docker compose config -q
+
+      - name: Build backend image
+        run: docker compose build

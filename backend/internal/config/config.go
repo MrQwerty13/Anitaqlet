@@ -5,9 +5,9 @@ import (
 )
 
 type Config struct {
-	Addr       string
-	DBPath     string
-	FrontendURL string
+	Addr          string
+	DBPath        string
+	FrontendURL   string
 	SessionSecret string
 
 	YandexClientID     string
