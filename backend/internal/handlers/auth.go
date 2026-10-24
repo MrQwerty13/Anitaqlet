@@ -13,10 +13,12 @@ type AuthHandler struct {
 	oauth    *auth.OAuthService
 	users    *store.UserStore
 	sessions *store.SessionStore
+	secure   bool
+	features func() gin.H
 }
 
-func NewAuthHandler(oauth *auth.OAuthService, users *store.UserStore, sessions *store.SessionStore) *AuthHandler {
-	return &AuthHandler{oauth: oauth, users: users, sessions: sessions}
+func NewAuthHandler(oauth *auth.OAuthService, users *store.UserStore, sessions *store.SessionStore, cookieSecure bool, features gin.H) *AuthHandler {
+	return &AuthHandler{oauth: oauth, users: users, sessions: sessions, secure: cookieSecure, features: func() gin.H { return features }}
 }
 
 func (h *AuthHandler) BeginYandex(c *gin.Context) {
@@ -46,13 +48,15 @@ func (h *AuthHandler) CallbackGitHub(c *gin.Context) {
 func (h *AuthHandler) Me(c *gin.Context) {
 	u := middleware.UserFrom(c)
 	if u == nil {
-		c.JSON(http.StatusOK, gin.H{"user": nil})
+		c.JSON(http.StatusOK, gin.H{"user": nil, "features": h.features()})
 		return
 	}
+	needsConsent := !u.ConsentPersonalData || u.PrivacyPolicyVersion == nil || *u.PrivacyPolicyVersion != store.PrivacyPolicyVersion
 	c.JSON(http.StatusOK, gin.H{
 		"user":                   u,
 		"privacy_policy_version": store.PrivacyPolicyVersion,
-		"needs_consent":          !u.ConsentPersonalData,
+		"needs_consent":          needsConsent,
+		"features":               h.features(),
 	})
 }
 
@@ -66,6 +70,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   h.secure,
 	})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

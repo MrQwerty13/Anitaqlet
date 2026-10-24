@@ -1,5 +1,9 @@
 package models
 
+import (
+	"time"
+)
+
 type User struct {
 	ID                   string  `json:"id"`
 	OAuthProvider        string  `json:"oauth_provider"`
@@ -14,6 +18,20 @@ type User struct {
 	PremiumUntil         *string `json:"premium_until,omitempty"`
 	CreatedAt            string  `json:"created_at"`
 	UpdatedAt            string  `json:"updated_at"`
+}
+
+func (u *User) PremiumActive() bool {
+	if !u.IsPremium {
+		return false
+	}
+	if u.PremiumUntil == nil {
+		return true
+	}
+	t, err := time.Parse(time.RFC3339Nano, *u.PremiumUntil)
+	if err != nil {
+		return false
+	}
+	return time.Now().UTC().Before(t)
 }
 
 // Profile is data pulled from an OAuth provider.

@@ -41,6 +41,7 @@ func (s *OAuthService) setStateCookie(c *gin.Context, provider, nonce string) er
 		MaxAge:   int(stateTTL.Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   s.cfg.CookieSecure,
 	})
 	return nil
 }

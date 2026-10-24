@@ -50,7 +50,8 @@ func (a *Auth) ConsentRequired() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		if !u.ConsentPersonalData {
+		outdated := u.PrivacyPolicyVersion == nil || *u.PrivacyPolicyVersion != store.PrivacyPolicyVersion
+		if !u.ConsentPersonalData || outdated {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error":   "consent_required",
 				"message": "Требуется согласие на обработку персональных данных",

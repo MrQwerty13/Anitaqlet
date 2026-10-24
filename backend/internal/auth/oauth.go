@@ -168,6 +168,7 @@ func (s *OAuthService) HandleCallback(c *gin.Context, provider string) {
 		MaxAge:   int(time.Until(expires).Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   s.cfg.CookieSecure,
 	})
 
 	if !user.ConsentPersonalData {

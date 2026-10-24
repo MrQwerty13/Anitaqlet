@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Build
 FROM golang:1.26-alpine AS builder
 WORKDIR /src
@@ -5,10 +7,12 @@ WORKDIR /src
 RUN apk add --no-cache git ca-certificates
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/server ./cmd/server
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -o /out/server ./cmd/server
 
 # Runtime
 FROM alpine:3.21
@@ -30,5 +34,8 @@ USER app
 
 VOLUME ["/data"]
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
 
 CMD ["/app/server"]

@@ -9,7 +9,7 @@ import (
 	"github.com/mikhail/anitaqlet/backend/internal/models"
 )
 
-const PrivacyPolicyVersion = "1.0"
+const PrivacyPolicyVersion = "1.1"
 
 type UserStore struct {
 	db *sql.DB
@@ -116,6 +116,30 @@ func (s *UserStore) GrantConsent(userID, ip, ua string) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *UserStore) ActivatePremium(userID string, days int) error {
+	var current sql.NullString
+	err := s.db.QueryRow(`
+		SELECT premium_until FROM users WHERE id = ? AND deleted_at IS NULL`, userID,
+	).Scan(&current)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	base := time.Now().UTC()
+	if current.Valid {
+		if t, err := time.Parse(time.RFC3339Nano, current.String); err == nil && t.After(base) {
+			base = t
+		}
+	}
+	until := base.Add(time.Duration(days) * 24 * time.Hour)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err = s.db.Exec(`
+		UPDATE users SET is_premium = 1, premium_until = ?, updated_at = ?
+		WHERE id = ? AND deleted_at IS NULL`,
+		until.Format(time.RFC3339Nano), now, userID,
+	)
+	return err
 }
 
 func (s *UserStore) scanUser(row *sql.Row) (*models.User, error) {

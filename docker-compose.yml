@@ -1,18 +1,26 @@
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/mrqwerty13/anitaqlet-backend:${TAG:-latest}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       ADDR: ":8080"
       DB_PATH: /data/anitaqlet.db
       MIGRATIONS_DIR: /app/migrations
       FRONTEND_DIR: /app/frontend
-      FRONTEND_URL: http://localhost:8080
-      OAUTH_REDIRECT_BASE: http://localhost:8080
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      OAUTH_REDIRECT_BASE: ${OAUTH_REDIRECT_BASE:-http://localhost:8080}
+      APP_ENV: ${APP_ENV:-development}
       SESSION_SECRET: ${SESSION_SECRET:-dev-change-me}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LIBRETRANSLATE_URL: ${LIBRETRANSLATE_URL:-}
+      LIBRETRANSLATE_API_KEY: ${LIBRETRANSLATE_API_KEY:-}
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      YOOKASSA_RETURN_URL: ${YOOKASSA_RETURN_URL:-}
+      PREMIUM_PRICE_RUB: ${PREMIUM_PRICE_RUB:-99}
       YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID:-}
       YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET:-}
       VK_CLIENT_ID: ${VK_CLIENT_ID:-}
@@ -23,6 +31,12 @@ services:
       - sqlite_data:/data
       - ./frontend:/app/frontend:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   sqlite_data:

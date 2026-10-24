@@ -69,7 +69,7 @@ func TestUpsertConsentSessionMe(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	mw := middleware.NewAuth(users, sessions)
-	h := handlers.NewAuthHandler(nil, users, sessions)
+	h := handlers.NewAuthHandler(nil, users, sessions, false, gin.H{})
 	r.Use(mw.Optional())
 	r.GET("/auth/me", h.Me)
 	r.POST("/auth/consent", mw.Required(), h.Consent)

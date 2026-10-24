@@ -4,6 +4,8 @@
 
 Примеры ниже для Ubuntu 22.04/24.04 LTS. Домен в примерах: `anitaqlet.example.com` — подставьте свой.
 
+**Важно:** сервер не собирает код сам. Go-сборка и Docker-образ делаются в GitHub Actions и публикуются в GHCR; на сервере — только `docker compose pull && up -d` (это секции 5 и 8).
+
 ---
 
 ## 0. Что нужно
@@ -12,6 +14,7 @@
 - Домен и доступ к DNS-записям
 - SSH-доступ к серверу (по ключу)
 - OAuth-приложения провайдеров (Yandex, VK, GitHub) — понадобятся client id/secret
+- Аккаунт GitHub с правами на репозиторий (для релизных workflow)
 
 ---
 
@@ -86,6 +89,7 @@ SESSION_SECRET=$(openssl rand -hex 32)
 `.env` (заполните своими значениями):
 
 ```bash
+APP_ENV=production
 SESSION_SECRET=<сгенерированная строка выше>
 
 YANDEX_CLIENT_ID=...
@@ -97,9 +101,19 @@ GITHUB_CLIENT_SECRET=...
 
 OAUTH_REDIRECT_BASE=https://anitaqlet.example.com
 FRONTEND_URL=https://anitaqlet.example.com
+
+# Платежи ЮKassa (если включены)
+#YOOKASSA_SHOP_ID=...
+#YOOKASSA_SECRET_KEY=...
+#YOOKASSA_RETURN_URL=https://anitaqlet.example.com/?paid=1
+
+# Автоперевод LibreTranslate (URL пуст = выключен)
+#LIBRETRANSLATE_URL=http://libretranslate:5000
 ```
 
 `.env` в git не попадает (`.gitignore`) — так и оставляем.
+
+При `APP_ENV=production` приложение **падает при старте**, если `SESSION_SECRET` пуст или равен дефолту `dev-change-me` — проверьте значение до перезапуска.
 
 ### 3.2 OAuth-приложения провайдеров
 
@@ -126,33 +140,43 @@ Redirect URI у всех — `{домен}/auth/callback/{провайдер}`:
 
 После создания OAuth-приложений впишите id/secret в `.env` и перезапустите контейнер (шаг 5).
 
-## 4. Скрыть порт приложения наружу
+### 3.3 Доступ GitHub Actions для push-деплоя (секреты)
 
-Сейчас `docker-compose.yml` публикует `8080:8080` на все интерфейсы. За reverse proxy приложению это не нужно — замените в `docker-compose.yml`:
+Release-workflow сам собирает образ в GHCR и разворачивает его на сервере по SSH. Нужны:
 
-```yaml
-    ports:
-      - "127.0.0.1:8080:8080"
-```
+| Где задать | Значение |
+| --- | --- |
+| Settings → Secrets → Actions → `DEPLOY_HOST` | IP сервера (или домен) |
+| `DEPLOY_USER` | SSH-пользователь (например `root` или `deploy`) |
+| `DEPLOY_SSH_KEY` | Приватный ключ SSH для деплоя (публичный — в `~/.ssh/authorized_keys` на сервере) |
+| `DEPLOY_PORT` | Порт SSH (по умолчанию 22; можно не задавать) |
+| Settings → Variables → `DEPLOY_DIR` | Каталог репозитория на сервере (например `/home/deploy/Anitaqlet`; по умолчанию `$HOME/Anitaqlet`) |
 
-Приложение станет доступно только с самого сервера; наружу пойдёт только Caddy (80/443).
+Доступ к GHCR образу публичный через GITHUB_TOKEN — pull на сервере анонимный (публичный репозиторий GHCR) либо `docker login ghcr.io` с токеном `read:packages`.
 
-## 5. Поднять приложение
+## 4. Порт приложения
+
+`docker-compose.yml` по умолчанию публикует `127.0.0.1:8080:8080` — приложение доступно только с самого сервера; наружу идёт только Caddy (80/443).
+
+## 5. Поднять приложение (первый раз)
 
 ```bash
 cd ~/Anitaqlet
-docker compose up -d --build
-docker compose ps            # backend должен быть Up/healthy
-docker compose logs backend  # ожидаем: "sqlite ready" и "listening on :8080"
+docker compose pull backend    # тянуть образ из GHCR (рекомендуется: TAG=<версия> или latest)
+docker compose up -d
+docker compose ps              # backend должен быть Up (healthy)
+docker compose logs backend    # ожидаем: "sqlite ready" и "listening"
 ```
+
+Если публичный образ ещё не собран (первый запуск до релиза) — соберите локально: `docker compose up -d --build` (override-файл `docker-compose.override.yml` добавляет секцию `build:` автоматически).
 
 Проверка с сервера:
 
 ```bash
-curl -s http://127.0.0.1:8080/health   # {"status":"ok"}
+curl -s http://127.0.0.1:8080/health   # {"status":"ok","db":"ok"}
 ```
 
-Миграции применяются автоматически при старте. SQLite лежит в named volume (`anitaqlet_sqlite_data` — точное имя: `docker volume ls`).
+Миграции применяются автоматически при старте (журнал — таблица `schema_migrations`; повторный запуск безопасен). SQLite лежит в named volume `sqlite_data` — переживает `docker compose pull/up -d` без потери данных.
 
 ## 6. HTTPS и домен (Caddy)
 
@@ -199,9 +223,9 @@ apt install -y certbot python3-certbot-nginx
 certbot --nginx -d anitaqlet.example.com
 ```
 
-## 7. Бэкапы (SQLite)
+## 7. Бэкапы (SQLite, WAL)
 
-БД — один файл в volume. Дамп делаем через официальный sqlite3-образ (в образе приложения sqlite3-CLI нет):
+БД — один файл в volume. Режим WAL включён — **нельзя просто `cp` файла**, нужен sqlite-совместимый бэкап (`.backup` / `VACUUM INTO`); скрипт ниже уже это делает.
 
 Скрипт `~/backup-anitaqlet.sh`:
 
@@ -233,22 +257,52 @@ crontab -e   # добавить строку:
 
 Копии лежат на самом сервере — параллельно складывайте их на внешнее хранилище (S3 и т.п.).
 
-## 8. Обновления
+## 8. Релизы и обновления
+
+Образы собираются в GitHub Actions по тегу и публикуются в GHCR:
+
+```
+ghcr.io/mrqwerty13/anitaqlet-backend:<semver>   # например 1.2.0
+ghcr.io/mrqwerty13/anitaqlet-backend:latest
+```
+
+**Выкатить релиз** (локально, с доступом к репозиторию):
+
+```bash
+git checkout main
+git pull
+git tag v1.0.0          # semver-тег, например
+git push origin v1.0.0  # → CI соберёт multi-arch образ и задеплоит по SSH автоматически
+```
+
+Деплой в workflow: `docker compose pull backend && docker compose up -d` с `TAG=<версия>` (пиннинг на точный тег релиза).
+
+**Ручное обновление/перевыпуск** на сервере (если деплой по SSH не настроен):
 
 ```bash
 cd ~/Anitaqlet
 git pull
-docker compose up -d --build
-docker compose logs -f backend   # убедиться, что поднялся
+TAG=1.0.0 docker compose pull backend && TAG=1.0.0 docker compose up -d
 ```
 
-Миграции применятся сами. Откат — `git reset --hard <коммит>` + `docker compose up -d --build`.
+**Откат** на предыдущий тег (образы прошлых релизов остаются в GHCR):
+
+```bash
+cd ~/Anitaqlet
+TAG=0.9.0 docker compose pull backend
+TAG=0.9.0 docker compose up -d
+docker compose ps
+```
+
+Миграции в релизах только аддитивные (новые таблицы/колонки) — откат образа на старый тег безопасен для уже накаченных миграций.
+
+`docker-compose.override.yml` (dev-сборка `build:`) на сервере не нужен: workflow и `pull/up` используют образ. Если файл появился после `git pull` — он не мешает (без `--build` compose использует образ), но можно удалить.
 
 ## 9. Эксплуатация
 
 ```bash
-docker compose ps                 # статус
-docker compose logs -f backend    # логи в реальном времени
+docker compose ps                 # статус (Up (healthy) — healthcheck /health)
+docker compose logs -f backend    # логи в реальном времени (JSON: level, timestamp)
 docker compose restart backend    # рестарт
 docker compose down               # остановить всё (volume сохраняется)
 journalctl -u caddy -f            # логи Caddy
@@ -261,10 +315,11 @@ Health-чек для мониторинга/uptime-сервисов: `GET https:
 | Симптом | Что смотреть |
 | --- | --- |
 | Сайт не открывается по домену | `dig +short домен`; `ufw status`; `journalctl -u caddy -f` (частая причина — DNS ещё не применился или 80/443 закрыты) |
-| `502 Bad Gateway` | `docker compose ps` (backend Up?), `docker compose logs backend`; слушает ли на 127.0.0.1:8080 |
+| `502 Bad Gateway` | `docker compose ps` (backend Up/healthy?), `docker compose logs backend`; слушает ли на 127.0.0.1:8080 |
+| Backend падает сразу после старта | `docker compose logs backend` — при `APP_ENV=production` типичная причина: не задан/дефолтный `SESSION_SECRET` |
+| `pull` не находит образ | Проверьте тег релиза в GHCR; при приватном GHCR — `docker login ghcr.io` на сервере |
 | Ошибка входа через OAuth / redirect mismatch | В `OAUTH_REDIRECT_BASE` и в настройках OAuth-приложения провайдера должен стоять точный HTTPS-домен и путь `/auth/callback/...`. Проверьте `.env` и перезапустили ли контейнер после правок |
 | Caddy не выпускает сертификат | Домен должен резолвиться в IP сервера и быть доступен на 80 снаружи; смотрите `journalctl -u caddy` |
-| Backend падает при старте | `docker compose logs backend` — обычно ошибка миграций или недоступность volume |
 | Удостовериться, что БД на месте | `docker volume ls | grep anitaqlet`; размер: `docker run --rm -v anitaqlet_sqlite_data:/data alpine ls -lh /data` |
 
 ## Чек-лист
@@ -272,8 +327,9 @@ Health-чек для мониторинга/uptime-сервисов: `GET https:
 - [ ] DNS A-запись указывает на сервер, `dig` подтверждает
 - [ ] UFW: 22/80/443 открыты, 8080 не торчит наружу
 - [ ] Docker + compose установлены, пользователь в группе `docker`
-- [ ] `.env`: сильный `SESSION_SECRET`, OAuth id/secret, `OAUTH_REDIRECT_BASE=https://домен`
-- [ ] OAuth-приятия провайдеров созданы с callback `https://домен/auth/callback/...`
-- [ ] `docker compose up -d --build` → `/health` отвечает
+- [ ] `.env`: сильный `SESSION_SECRET`, `APP_ENV=production`, OAuth id/secret, `OAUTH_REDIRECT_BASE=https://домен`
+- [ ] OAuth-приложения провайдеров созданы с callback `https://домен/auth/callback/...`
+- [ ] Секреты GitHub Actions: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (см. 3.3)
+- [ ] `git tag vX.Y.Z && git push origin vX.Y.Z` — workflow собрал образ и задеплоил; `/health` отвечает
 - [ ] Caddy отдаёт HTTPS по домену, вход через OAuth работает end-to-end
 - [ ] Бэкап-скрипт в crontab, тестовый restore проверен
