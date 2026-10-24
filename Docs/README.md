@@ -1,24 +1,28 @@
 # Anitaqlet
 
+[![CI](https://github.com/MrQwerty13/Anitaqlet/actions/workflows/ci.yml/badge.svg)](https://github.com/MrQwerty13/Anitaqlet/actions/workflows/ci.yml)
+
 Anitaqlet is a self-hosted Quizlet analog — an MVP web app for learning foreign words (decks of term/translation cards, quiz mode, offline support). UI is in Russian; the project targets the Russian market and is designed around 152-ФЗ requirements (minimal personal data, explicit consent, right to deletion).
 
-**Status: early MVP.** Auth and infrastructure are in place; decks/cards/quiz APIs are not implemented yet (schema exists). See [Roadmap](#roadmap).
+**Status: early MVP with CI.** Auth, consent flow, Docker packaging and GitHub Actions CI are done; decks/cards/quiz APIs are not implemented yet (schema exists). See [Roadmap](#roadmap).
 
 ## Stack
 
-| Layer     | Choice                                                                  |
-| --------- | ----------------------------------------------------------------------- |
-| Backend   | Go 1.26, [gin](https://github.com/gin-gonic/gin)                        |
-| Database  | SQLite via [`modernc.org/sqlite`](https://pkg.go.dev/modernc.org/sqlite) (pure Go, `CGO_ENABLED=0`) |
-| Auth      | OAuth2 (`golang.org/x/oauth2`) — **Yandex, VK, GitHub**                  |
-| Frontend  | Vanilla HTML + CSS + JS, no frameworks or build step                    |
-| Packaging | Docker (multi-stage) + docker-compose                                   |
-| Migrations| Plain SQL files (`backend/migrations/*.sql`), applied at startup        |
+| Layer      | Choice                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| Backend    | Go 1.26, [gin](https://github.com/gin-gonic/gin)                                           |
+| Database   | SQLite via [`modernc.org/sqlite`](https://pkg.go.dev/modernc.org/sqlite) (pure Go, `CGO_ENABLED=0`) |
+| Auth       | OAuth2 (`golang.org/x/oauth2`) — **Yandex, VK, GitHub**                                     |
+| Frontend   | Vanilla HTML + CSS + JS, no frameworks or build step                                       |
+| Packaging  | Docker (multi-stage) + docker-compose                                                      |
+| Migrations | Plain SQL files (`backend/migrations/*.sql`), applied at startup                           |
+| CI         | GitHub Actions — backend checks, JS syntax, Docker image build ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) |
 
 ## Project layout
 
 ```
 Anitaqlet/
+├── .github/workflows/ci.yml # CI: gofmt/vet/build/test, JS check, docker build
 ├── backend/
 │   ├── cmd/server/main.go      # wiring: config, db, auth, routes, static frontend
 │   ├── internal/
@@ -59,12 +63,29 @@ cd backend
 DB_PATH=../data/anitaqlet.db FRONTEND_DIR=../frontend go run ./cmd/server
 ```
 
-### Tests
+### Checks (same as CI)
 
 ```bash
 cd backend
-go test ./...
+gofmt -l .            # must print nothing
+go vet ./...
+go build ./...
+go test -race ./...
+
+# from repo root
+node --check frontend/js/app.js
+docker compose config -q && docker compose build
 ```
+
+## Continuous integration
+
+Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — runs on every push, on pull requests, and on manual dispatch. Permissions are read-only; concurrent runs on the same ref are cancelled.
+
+| Job | Checks |
+| --- | --- |
+| **Backend (Go)** | `gofmt -l` (fails if files unformatted), `go vet`, `go build`, `go test -race` — Go version taken from `backend/go.mod`, module cache |
+| **Frontend** | `node --check` on every `frontend/js/**/*.js`; verifies `index.html` and `privacy.html` exist |
+| **Docker** | `docker compose config` validation, `docker compose build` (proves the image builds) |
 
 ## Configuration
 
@@ -129,6 +150,7 @@ Single-page shell with no build tooling:
 - [x] Schema for users, consent logs, decks, cards, quiz sessions, premium flags
 - [x] Docker multi-stage build (non-root user, `CGO_ENABLED=0`), compose volume for SQLite
 - [x] Health endpoint, static frontend serving, store unit tests
+- [x] GitHub Actions CI: `gofmt`/`vet`/`build`/`test -race`, JS syntax check, Docker image build ([PR #1](https://github.com/MrQwerty13/Anitaqlet/pull/1))
 
 ### Planned (from `Docs/TODO.md`)
 
@@ -138,6 +160,7 @@ Single-page shell with no build tooling:
 - [ ] Offline mode: Service Worker + IndexedDB cache, background sync
 - [ ] Premium subscription: free tier limits (100 cards, 1 deck), 99₽/mo unlimited, enforced by backend middleware
 - [ ] UI polish: accent color picker, full Apple-like minimalist styling
+- [ ] Deployment pipeline (server or PaaS) — CI covers build/test only so far
 
 ## License
 
