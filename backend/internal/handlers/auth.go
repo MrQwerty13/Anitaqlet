@@ -50,9 +50,9 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"user":                     u,
-		"privacy_policy_version":   store.PrivacyPolicyVersion,
-		"needs_consent":            !u.ConsentPersonalData,
+		"user":                   u,
+		"privacy_policy_version": store.PrivacyPolicyVersion,
+		"needs_consent":          !u.ConsentPersonalData,
 	})
 }
 

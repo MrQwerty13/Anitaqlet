@@ -38,11 +38,11 @@ func fetchYandex(ctx context.Context, accessToken string) (*models.Profile, erro
 		return nil, err
 	}
 	var info struct {
-		ID           string `json:"id"`
-		Login        string `json:"login"`
-		DisplayName  string `json:"display_name"`
-		RealName     string `json:"real_name"`
-		DefaultEmail string `json:"default_email"`
+		ID              string `json:"id"`
+		Login           string `json:"login"`
+		DisplayName     string `json:"display_name"`
+		RealName        string `json:"real_name"`
+		DefaultEmail    string `json:"default_email"`
 		DefaultAvatarID string `json:"default_avatar_id"`
 		IsAvatarEmpty   bool   `json:"is_avatar_empty"`
 	}
@@ -192,9 +192,9 @@ func fetchGitHubPrimaryEmail(ctx context.Context, accessToken string) (string, e
 		return "", err
 	}
 	var emails []struct {
-		Email   string `json:"email"`
-		Primary bool   `json:"primary"`
-		Verified bool  `json:"verified"`
+		Email    string `json:"email"`
+		Primary  bool   `json:"primary"`
+		Verified bool   `json:"verified"`
 	}
 	if err := json.Unmarshal(body, &emails); err != nil {
 		return "", err
