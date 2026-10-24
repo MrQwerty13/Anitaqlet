@@ -42,7 +42,7 @@ Anitaqlet/
 │   └── js/app.js               # session state, consent flow, logout
 ├── docker-compose.yml
 ├── .env.example
-└── Docs/                       # README, TODO, LICENSE
+└── Docs/                       # README, DEPLOY, TODO, LICENSE
 ```
 
 ## Getting started
@@ -62,6 +62,10 @@ The app is served at <http://localhost:8080> (backend and frontend on the same o
 cd backend
 DB_PATH=../data/anitaqlet.db FRONTEND_DIR=../frontend go run ./cmd/server
 ```
+
+### Deploy to a server
+
+Full production guide (VPS + domain + HTTPS via Caddy + backups): **[DEPLOY.md](DEPLOY.md)**.
 
 ### Checks (same as CI)
 
