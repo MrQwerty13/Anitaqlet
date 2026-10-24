@@ -1,0 +1,12 @@
+.env
+*.db
+*.db-*
+data/
+.DS_Store
+backend/server
+backend/bin/
+.idea/
+.vscode/
+*.exe
+*.test
+*.out

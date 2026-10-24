@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Anitaqlet</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <h1>Anitaqlet</h1>
+    <p class="tagline">Изучение иностранных слов</p>
+
+    <div id="guest" class="panel hidden">
+      <nav class="auth">
+        <a class="btn" href="/auth/yandex">Войти через Яндекс</a>
+        <a class="btn" href="/auth/vk">Войти через VK</a>
+        <a class="btn" href="/auth/github">Войти через GitHub</a>
+      </nav>
+      <p class="hint">Вход через OAuth. Обработка ПДн — по <a href="/privacy.html">политике</a>.</p>
+    </div>
+
+    <div id="user" class="panel hidden">
+      <div class="profile">
+        <img id="avatar" alt="" width="56" height="56" />
+        <div>
+          <div id="name" class="name"></div>
+          <div id="email" class="muted"></div>
+        </div>
+      </div>
+      <button type="button" id="logout" class="btn ghost">Выйти</button>
+    </div>
+
+    <div id="error" class="banner error hidden"></div>
+  </main>
+
+  <dialog id="consent-dialog">
+    <form method="dialog" id="consent-form">
+      <h2>Согласие на обработку ПДн</h2>
+      <p>
+        Для работы сервиса нужно согласие на обработку персональных данных
+        (имя, email, аватар от провайдера входа) по 152-ФЗ.
+        Подробности — в <a href="/privacy.html" target="_blank" rel="noopener">политике конфиденциальности</a>
+        (версия <span id="policy-ver">1.0</span>).
+      </p>
+      <label class="check">
+        <input type="checkbox" id="consent-check" required />
+        Даю согласие на обработку персональных данных
+      </label>
+      <div class="actions">
+        <button type="submit" class="btn" id="consent-accept">Принять</button>
+        <button type="button" class="btn ghost" id="consent-decline">Отмена</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
